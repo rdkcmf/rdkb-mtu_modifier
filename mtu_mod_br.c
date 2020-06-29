@@ -32,6 +32,7 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
 #include <linux/netfilter_bridge.h>
+#include <linux/version.h>
 #include <net/ip.h>
 #include <net/dst.h>
 
@@ -55,14 +56,27 @@ static unsigned int mtu_mod_hook(unsigned int hook, struct sk_buff *skb,
 
 static struct list_head gMtuModBrList;
 static spinlock_t   lock;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
 static struct nf_hook_ops mtu_mod_ops={
-        {NULL, NULL},
         (nf_hookfn *)mtu_mod_hook,
+        NULL,
         THIS_MODULE,
         PF_BRIDGE,
         NF_BR_FORWARD, /*before deliver a SKB to the destination port*/
         NF_BR_PRI_FIRST
 };
+#else
+static struct nf_hook_ops mtu_mod_ops={
+        {NULL, NULL},
+        (nf_hookfn *)mtu_mod_hook,
+        NULL,
+        THIS_MODULE,
+        PF_BRIDGE,
+        NF_BR_FORWARD, /*before deliver a SKB to the destination port*/
+        NF_BR_PRI_FIRST
+};
+#endif
 
 extern __sum16 ip_fast_csum(const void *iph, unsigned int ihl);
 extern __sum16 ip_compute_csum(const void *buff, int len);
@@ -83,12 +97,22 @@ void mtu_mod_node_init(void)
 {
     INIT_LIST_HEAD(&gMtuModBrList);
     spin_lock_init(&lock);
-    (void)nf_register_hook(&mtu_mod_ops);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+    nf_register_net_hook(&init_net, &mtu_mod_ops);
+#else
+    nf_register_hook(&mtu_mod_ops);
+#endif
 }
 
 void mtu_mod_node_deinit(void)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+    nf_unregister_net_hook(&init_net, &mtu_mod_ops);
+#else
     nf_unregister_hook(&mtu_mod_ops);
+#endif
+
     mtu_mod_flush_nodes();
 }
 
