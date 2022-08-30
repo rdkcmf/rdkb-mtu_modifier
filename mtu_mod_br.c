@@ -68,12 +68,22 @@ static struct nf_hook_ops mtu_mod_ops={
 };
 #else
 static struct nf_hook_ops mtu_mod_ops={
-        {NULL, NULL},
+#if defined (INTEL_PUMA7) //upstreamed mtu-mod-proc-fix-type.patch as part of RDKB-41493
+	.hook = (nf_hookfn *)mtu_mod_hook,
+	#if LINUX_VERSION_CODE < KERNEL_VERSION(4,4,0)
+	.owner = THIS_MODULE,
+	#endif
+	.pf = PF_BRIDGE,
+	.hooknum = NF_BR_FORWARD,  /*before deliver a SKB to the destination port*/
+	.priority = NF_BR_PRI_FIRST,
+#else
+	{NULL, NULL},
         (nf_hookfn *)mtu_mod_hook,
         THIS_MODULE,
         PF_BRIDGE,
         NF_BR_FORWARD, /*before deliver a SKB to the destination port*/
         NF_BR_PRI_FIRST
+#endif
 };
 #endif
 
@@ -425,7 +435,12 @@ static unsigned int mtu_mod_hook(unsigned int hook, struct sk_buff *skb,
 
    //>>zqiu: indev and outdev could be null
     if(!indev || !outdev){
-		return (NF_ACCEPT);
+	#if defined (INTEL_PUMA7)
+		printk(KERN_ERR "COMCAST ERROR:: indev  %s outdev  %s\n", indev?indev->name:"null",  outdev?outdev->name:"null" );
+		return (NF_DROP);
+	#else	    
+	    return (NF_ACCEPT);
+	#endif
 	}
     //<<
 
